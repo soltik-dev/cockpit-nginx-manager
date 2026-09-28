@@ -1,0 +1,28 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+@use "page.scss";
+@use "ct-card.scss";
+
+.nginx-manager-code {
+    font-family: var(--pf-t--global--font--family--mono);
+    font-size: var(--pf-t--global--font--size--sm);
+}
+
+.nginx-manager-output {
+    max-block-size: 24rem;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-family: var(--pf-t--global--font--family--mono);
+    font-size: var(--pf-t--global--font--size--sm);
+    margin: 0;
+}
+
+// Let the kebab column shrink to its content
+.ct-table td.pf-v6-c-table__action {
+    inline-size: 1%;
+    white-space: nowrap;
+}
+
+.nginx-manager-log {
+    max-block-size: 60vh;
+}

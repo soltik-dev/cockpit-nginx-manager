@@ -1,0 +1,274 @@
+#!/usr/bin/python3 -cimport os, sys; os.execv(os.path.dirname(sys.argv[1]) + "/common/pywrap", sys.argv)
+
+# Run this with --help to see available options for tracing and debugging
+# See https://github.com/cockpit-project/cockpit/blob/main/test/common/testlib.py
+# "class Browser" and "class MachineCase" for the available API.
+
+import testlib
+
+
+# Nondestructive tests all run in the same running VM. This allows them to run in Packit, Fedora, and
+# RHEL dist-git gating. They must not permanently change any file or configuration on the system in a
+# way that influences other tests.
+@testlib.nondestructive
+class TestApplication(testlib.MachineCase):
+    def setUp(self):
+        super().setUp()
+        m = self.machine
+        self.restore_dir("/etc/nginx/conf.d")
+        self.addCleanup(m.execute, "rm -rf /etc/nginx-manager /var/www/nginx-manager-test")
+        m.execute("systemctl start nginx")
+        self.addCleanup(m.execute, "systemctl stop nginx")
+
+    def testService(self):
+        b = self.browser
+
+        self.login_and_go("/nginx-manager")
+        b.wait_text("#nginx-service .pf-v6-c-card__title", "nginx web server")
+        b.wait_in_text("#nginx-service", "Running")
+
+        # configuration test dialog
+        b.click("#nginx-service button:contains('Test configuration')")
+        b.wait_in_text(".pf-v6-c-modal-box", "The nginx configuration is valid")
+        b.click(".pf-v6-c-modal-box button:contains('Close')")
+        b.wait_not_present(".pf-v6-c-modal-box")
+
+        # stop and start
+        b.click("#nginx-service button:contains('Stop')")
+        b.wait_in_text("#nginx-service", "Not running")
+        b.click("#nginx-service button:contains('Start')")
+        b.wait_in_text("#nginx-service", "Running")
+
+    def testSites(self):
+        b = self.browser
+        m = self.machine
+        conf = "/etc/nginx/conf.d/test.example.com.conf"
+
+        self.login_and_go("/nginx-manager")
+        b.wait_in_text("#nginx-sites", "No sites configured")
+
+        # add a static site
+        b.click("#add-site")
+        b.set_input_text("#site-domains", "test.example.com www.test.example.com")
+        b.wait_val("#site-name", "test.example.com")
+        b.set_input_text("#site-root", "/var/www/nginx-manager-test")
+        b.click(".pf-v6-c-modal-box button:contains('Add')")
+        b.wait_not_present(".pf-v6-c-modal-box")
+        b.wait_in_text("tr[data-site='test.example.com']", "Static website")
+        b.wait_in_text("tr[data-site='test.example.com']", "Enabled")
+        m.execute(f"test -f {conf}")
+        m.execute("test -f /var/www/nginx-manager-test/index.html")
+        m.execute("nginx -t")
+        self.assertIn("test.example.com www.test.example.com", m.execute(f"cat {conf}"))
+        # the placeholder page is served
+        self.assertIn("test.example.com", m.execute("curl -s -H 'Host: test.example.com' http://localhost/"))
+
+        # edit: switch to a single-page app
+        b.click("[id='site-test.example.com-menu']")
+        b.click(".pf-v6-c-menu__item:contains('Edit'):not(:contains('file'))")
+        b.wait_visible("#site-spa")
+        b.set_checked("#site-spa", True)
+        b.click(".pf-v6-c-modal-box button:contains('Save')")
+        b.wait_not_present(".pf-v6-c-modal-box")
+        testlib.wait(lambda: "/index.html;" in m.execute(f"cat {conf}"))
+
+        # an invalid extra directive is rejected and the previous file restored
+        before = m.execute(f"cat {conf}")
+        b.click("[id='site-test.example.com-menu']")
+        b.click(".pf-v6-c-menu__item:contains('Edit'):not(:contains('file'))")
+        b.click("button:contains('Advanced')")
+        b.set_input_text("#site-extra", "this_is_not_a_directive;")
+        b.click(".pf-v6-c-modal-box button:contains('Save')")
+        b.wait_in_text(".pf-v6-c-modal-box", "The site was not saved")
+        b.click(".pf-v6-c-modal-box button:contains('Cancel')")
+        b.wait_not_present(".pf-v6-c-modal-box")
+        self.assertEqual(before, m.execute(f"cat {conf}"))
+
+        # disable and enable
+        b.click("[id='site-test.example.com-menu']")
+        b.click(".pf-v6-c-menu__item:contains('Disable')")
+        b.click(".pf-v6-c-modal-box button:contains('Disable')")
+        b.wait_not_present(".pf-v6-c-modal-box")
+        b.wait_in_text("tr[data-site='test.example.com']", "Disabled")
+        m.execute(f"test -f {conf}.disabled && ! test -f {conf}")
+        b.click("[id='site-test.example.com-menu']")
+        b.click(".pf-v6-c-menu__item:contains('Enable')")
+        b.click(".pf-v6-c-modal-box button:contains('Enable')")
+        b.wait_not_present(".pf-v6-c-modal-box")
+        b.wait_in_text("tr[data-site='test.example.com']", "Enabled")
+        m.execute(f"test -f {conf}")
+
+        # self-signed certificate from the site menu, attached to the site
+        b.click("[id='site-test.example.com-menu']")
+        b.click(".pf-v6-c-menu__item:contains('Create self-signed certificate')")
+        b.wait_val("#selfsigned-domains", "test.example.com www.test.example.com")
+        b.wait_val("#selfsigned-name", "test.example.com")
+        b.click(".pf-v6-c-modal-box button:contains('Create')")
+        b.wait_not_present(".pf-v6-c-modal-box")
+        b.wait_in_text("tr[data-site='test.example.com']", "Self-signed")
+        b.wait_in_text("tr[data-cert='self:test.example.com']", "test.example.com")
+        m.execute("test -f /etc/nginx-manager/certs/test.example.com/privkey.pem")
+        testlib.wait(lambda: "listen 443 ssl" in m.execute(f"cat {conf}"))
+        m.execute("nginx -t")
+        code = m.execute("curl -s -o /dev/null -w '%{http_code}' -H 'Host: test.example.com' http://localhost/")
+        self.assertEqual(code.strip(), "301")
+
+        # delete the site, then the certificate
+        b.click("[id='site-test.example.com-menu']")
+        b.click(".pf-v6-c-menu__item:contains('Delete')")
+        b.click(".pf-v6-c-modal-box button:contains('Delete')")
+        b.wait_not_present(".pf-v6-c-modal-box")
+        b.wait_not_present("tr[data-site='test.example.com']")
+        m.execute(f"! test -e {conf}")
+
+        b.click("[id='cert-self:test.example.com-menu']")
+        b.click(".pf-v6-c-menu__item:contains('Delete')")
+        b.click(".pf-v6-c-modal-box button:contains('Delete')")
+        b.wait_not_present(".pf-v6-c-modal-box")
+        b.wait_not_present("tr[data-cert='self:test.example.com']")
+        m.execute("! test -e /etc/nginx-manager/certs/test.example.com")
+
+    def testAccessOptions(self):
+        b = self.browser
+        m = self.machine
+        conf = "/etc/nginx/conf.d/intranet.conf"
+        curl = "curl -s -o /dev/null -w '%{http_code}' -H 'Host: intranet.lan' "
+
+        self.login_and_go("/nginx-manager")
+        b.click("#add-site")
+        b.set_input_text("#site-domains", "intranet.lan")
+        b.set_input_text("#site-root", "/var/www/nginx-manager-test")
+        b.set_input_text("#site-httpPort", "8090")
+        b.set_input_text("#site-allowFrom", "127.0.0.0/8 ::1")
+        b.set_input_text("#site-maxBodySize", "64m")
+        b.set_checked("#site-security-headers", True)
+        b.set_checked("#site-auth", True)
+        b.set_input_text("#site-auth-user", "alice")
+        b.set_input_text("#site-auth-password", "s3cret")
+        b.click("#site-auth-add")
+        b.wait_in_text(".pf-v6-c-modal-box .pf-v6-c-label", "alice")
+        b.click(".pf-v6-c-modal-box button:contains('Add')")
+        b.wait_not_present(".pf-v6-c-modal-box")
+        b.wait_in_text("tr[data-site='intranet']", "Enabled")
+
+        content = m.execute(f"cat {conf}")
+        self.assertIn("listen 8090;", content)
+        self.assertIn("client_max_body_size 64m;", content)
+        self.assertIn("allow 127.0.0.0/8;", content)
+        self.assertIn("auth_basic_user_file /etc/nginx-manager/htpasswd/intranet;", content)
+        self.assertIn("X-Frame-Options", content)
+        m.execute("grep -q '^alice:' /etc/nginx-manager/htpasswd/intranet")
+        m.execute("nginx -t")
+        self.assertEqual(m.execute(curl + "http://localhost:8090/").strip(), "401")
+        self.assertEqual(m.execute(curl + "-u alice:s3cret http://localhost:8090/").strip(), "200")
+
+        # the log viewer shows the request we just made
+        b.click("[id='site-intranet-menu']")
+        b.click(".pf-v6-c-menu__item:contains('View logs')")
+        b.wait_in_text(".pf-v6-c-modal-box", "Last 200 lines of /var/log/nginx/intranet.access.log")
+        b.wait_in_text(".pf-v6-c-modal-box .nginx-manager-log", "GET / HTTP/1.1")
+        b.click(".pf-v6-c-modal-box button:contains('Close')")
+        b.wait_not_present(".pf-v6-c-modal-box")
+
+        # removing the user and disabling auth opens the site again
+        b.click("[id='site-intranet-menu']")
+        b.click(".pf-v6-c-menu__item:contains('Edit'):not(:contains('file'))")
+        b.set_checked("#site-auth", False)
+        b.click(".pf-v6-c-modal-box button:contains('Save')")
+        b.wait_not_present(".pf-v6-c-modal-box")
+        testlib.wait(lambda: "auth_basic" not in m.execute(f"cat {conf}"))
+        self.assertEqual(m.execute(curl + "http://localhost:8090/").strip(), "200")
+
+    def testPools(self):
+        b = self.browser
+        m = self.machine
+        conf = "/etc/php-fpm.d/intranet.conf"
+        self.restore_dir("/etc/php-fpm.d")
+        self.addCleanup(m.execute, "rm -rf /var/lib/nginx-manager; userdel php-intranet 2>/dev/null || true")
+        m.execute("systemctl start php-fpm")
+        self.addCleanup(m.execute, "systemctl stop php-fpm")
+
+        self.login_and_go("/nginx-manager")
+        b.wait_in_text("#php-pools", "Running")
+        b.wait_in_text("tr[data-pool='www']", "/run/php-fpm/www.sock")
+
+        # pool with a new dedicated user, on demand
+        b.click("#add-pool")
+        b.set_input_text("#pool-name", "intranet")
+        b.select_from_dropdown("#pool-user", "?new")
+        b.set_input_text("#pool-new-user", "php-intranet")
+        b.select_from_dropdown("#pool-pm", "ondemand")
+        b.set_input_text("#pool-max-children", "3")
+        b.set_input_text("#pool-memory", "128M")
+        b.set_input_text("#pool-slowlog", "4")
+        b.click(".pf-v6-c-modal-box button:contains('Add')")
+        b.wait_not_present(".pf-v6-c-modal-box")
+        b.wait_in_text("tr[data-pool='intranet']", "php-intranet")
+        b.wait_in_text("tr[data-pool='intranet']", "Enabled")
+        content = m.execute(f"cat {conf}")
+        self.assertIn("pm = ondemand", content)
+        self.assertIn("php_admin_value[memory_limit] = 128M", content)
+        self.assertIn("request_slowlog_timeout = 4s", content)
+        m.execute("id php-intranet")
+        m.execute("test -S /run/php-fpm/intranet.sock")
+        m.execute("test -d /var/lib/nginx-manager/php-sessions/intranet")
+        m.execute("php-fpm -t")
+
+        # a PHP site can pick the pool and gets a working stack
+        b.click("#add-site")
+        b.set_input_text("#site-domains", "phpintra.lan")
+        b.select_from_dropdown("#site-type", "php")
+        b.set_input_text("#site-root", "/var/www/nginx-manager-test")
+        b.select_from_dropdown("#site-pool", "unix:/run/php-fpm/intranet.sock")
+        b.click(".pf-v6-c-modal-box button:contains('Add')")
+        b.wait_not_present(".pf-v6-c-modal-box")
+        b.wait_in_text("tr[data-pool='intranet']", "phpintra.lan")
+        m.execute("echo '<?php echo \"pool ok \" . get_current_user();' > /var/www/nginx-manager-test/index.php")
+        m.execute("chmod -R a+rX /var/www/nginx-manager-test")
+        self.assertIn("pool ok php-intranet", m.execute("curl -s -H 'Host: phpintra.lan' http://localhost/"))
+
+        # invalid dynamic limits are rejected before touching the file
+        b.click("[id='pool-intranet-menu']")
+        b.click(".pf-v6-c-menu__item:contains('Edit'):not(:contains('file'))")
+        b.select_from_dropdown("#pool-pm", "dynamic")
+        b.set_input_text("#pool-max-spare", "99")
+        b.click(".pf-v6-c-modal-box button:contains('Save')")
+        b.wait_in_text(".pf-v6-c-modal-box", "min spare")
+        b.click(".pf-v6-c-modal-box button:contains('Cancel')")
+        b.wait_not_present(".pf-v6-c-modal-box")
+
+        # delete the site, then the pool
+        b.click("[id='site-phpintra.lan-menu']")
+        b.click(".pf-v6-c-menu__item:contains('Delete')")
+        b.click(".pf-v6-c-modal-box button:contains('Delete')")
+        b.wait_not_present("tr[data-site='phpintra.lan']")
+        b.click("[id='pool-intranet-menu']")
+        b.click(".pf-v6-c-menu__item:contains('Delete')")
+        b.click(".pf-v6-c-modal-box button:contains('Delete')")
+        b.wait_not_present("tr[data-pool='intranet']")
+        m.execute(f"! test -e {conf} && ! test -e /var/lib/nginx-manager/php-sessions/intranet")
+
+    def testUnmanaged(self):
+        b = self.browser
+        m = self.machine
+
+        m.write("/etc/nginx/conf.d/legacy.conf",
+                "server {\n    listen 8081;\n    server_name legacy.example.com;\n    return 204;\n}\n")
+        self.login_and_go("/nginx-manager")
+        b.wait_in_text("tr[data-site='legacy']", "legacy.example.com")
+        b.wait_in_text("tr[data-site='legacy']", "Unmanaged")
+
+        # edit as text
+        b.click("[id='site-legacy-menu']")
+        b.click(".pf-v6-c-menu__item:contains('Edit configuration file')")
+        b.set_input_text("#nginx-raw-editor",
+                         "server {\n    listen 8081;\n    server_name legacy.example.com renamed.example.com;\n"
+                         "    return 204;\n}\n")
+        b.click(".pf-v6-c-modal-box button:contains('Save')")
+        b.wait_not_present(".pf-v6-c-modal-box")
+        b.wait_in_text("tr[data-site='legacy']", "renamed.example.com")
+        self.assertIn("renamed.example.com", m.execute("cat /etc/nginx/conf.d/legacy.conf"))
+
+
+if __name__ == '__main__':
+    testlib.test_main()

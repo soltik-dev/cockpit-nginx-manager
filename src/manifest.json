@@ -1,0 +1,20 @@
+{
+    "requires": {
+        "cockpit": "137"
+    },
+
+    "conditions": [
+        {"path-exists": "/usr/sbin/nginx"}
+    ],
+
+    "tools": {
+        "index": {
+            "label": "Nginx",
+            "keywords": [
+                {
+                    "matches": ["nginx", "web", "site", "vhost", "certificate", "tls", "ssl", "letsencrypt", "certbot"]
+                }
+            ]
+        }
+    }
+}

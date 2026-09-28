@@ -1,0 +1,12 @@
+summary:
+    Run browser integration tests on the host
+require:
+  - cockpit-nginx-manager
+  - nginx
+  - php-fpm
+  - curl
+  - podman
+  - cockpit-ws
+  - cockpit-system
+test: ./browser.sh
+duration: 60m

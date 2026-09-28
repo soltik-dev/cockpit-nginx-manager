@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="addon">
+  <id>es.soltik.nginx_manager</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <name>Nginx</name>
+  <summary>Manage nginx sites and TLS certificates</summary>
+  <description>
+    <p>
+      Cockpit module to manage nginx virtual hosts (static, reverse proxy,
+      PHP-FPM) and their TLS certificates, using Let's Encrypt (certbot)
+      or self-signed certificates.
+    </p>
+  </description>
+  <extends>org.cockpit_project.cockpit</extends>
+  <launchable type="cockpit-manifest">nginx-manager</launchable>
+  <url type="homepage">https://soltik.es/</url>
+  <url type="bugtracker">https://github.com/soltik-dev/cockpit-nginx-manager/issues</url>
+  <developer id="es.soltik">
+    <name>Soltik</name>
+  </developer>
+</component>

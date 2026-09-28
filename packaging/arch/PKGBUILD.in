@@ -1,0 +1,15 @@
+pkgname=cockpit-nginx-manager
+pkgver=VERSION
+pkgrel=1
+pkgdesc='Cockpit module to manage nginx sites and TLS certificates'
+arch=('x86_64')
+url='https://github.com/soltik-dev/cockpit-nginx-manager'
+license=(LGPL)
+source=("SOURCE")
+sha256sums=('SKIP')
+
+package() {
+  depends=(cockpit)
+  cd $pkgname
+  make DESTDIR="$pkgdir" install PREFIX=/usr
+}
