@@ -46,6 +46,10 @@ updates:
       - dependency-name: "eslint"
         update-types: ["version-update:semver-major"]
 
+      # eslint-config-standard 17 (the last one for eslint 8) wants eslint-plugin-promise ^6
+      - dependency-name: "eslint-plugin-promise"
+        update-types: ["version-update:semver-major"]
+
       # @typescript-eslint is incompatible with TS 7
       # https://github.com/typescript-eslint/typescript-eslint/issues/12518
       - dependency-name: "typescript"
