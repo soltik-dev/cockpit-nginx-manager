@@ -114,6 +114,26 @@ The page only appears in Cockpit's menu when `/usr/sbin/nginx` exists
 (`conditions` in `src/manifest.json`). Cockpit needs administrative access
 ("Limited access" button) for any change.
 
+## Releases and COPR
+
+Versions are SemVer tags without a `v` prefix (`0.1.0`); `make print-version` uses
+`git describe --tags`. Releasing is just pushing an annotated tag whose message body
+becomes the release notes:
+
+```bash
+git tag -a 0.1.0 -m "0.1.0" -m "- first public release"   # 2nd -m = release notes
+git push origin 0.1.0
+```
+
+`.github/workflows/release.yml` runs `make dist node-cache` and creates the GitHub
+release with both tarballs (`Source0`/`Source1` of the spec). The published release
+triggers the Packit `copr_build` job (`packit.yaml`) into COPR
+`dukerth/cockpit-nginx-manager` for `fedora-all`, `epel-9` and `epel-10`. Packit
+rebuilds the SRPM itself from the tag (its `actions`), it does not download the
+release assets. One-time setup: Packit GitHub App installed on `soltik-dev`, and the
+COPR project listing `github.com/soltik-dev/cockpit-nginx-manager` under
+Settings → Integrations → "Packit allowed forge projects".
+
 ## Testing without the VM infrastructure
 
 - Templates: bundle `src/lib/templates.ts` with `npx esbuild --bundle --format=esm
@@ -148,4 +168,5 @@ PHP-FPM: per-pool `php_admin_value` presets beyond the form, pools for non-syste
 PHP builds (Remi SCL, several versions). Sites/nginx: `default_server` selection,
 proxy extras (upstream over HTTPS with self-signed cert,
 timeouts, `proxy_buffering off` for SSE), DNS-01 wildcard certificates, HTTP/3,
-rate limiting, Spanish translation (`po/es.po`), packaging releases via Packit.
+rate limiting, Spanish translation (`po/es.po`), Fedora dist-git packaging
+(`propose_downstream` in `packit.yaml`).

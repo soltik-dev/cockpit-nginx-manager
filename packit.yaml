@@ -18,7 +18,7 @@ actions:
     - make node-cache
     - sh -c 'sed -i "/^Source1:/ s/https:.*/$(ls *-node*.tar.xz)/" cockpit-*.spec'
   create-archive: make dist
-  # nginx-manager.git has no release tags; your project can drop this once you have a release
+  # version from `git describe`: the tag on releases, <tag>.<n>.g<hash> on PRs
   get-current-version: make print-version
 
 jobs:
@@ -36,14 +36,17 @@ jobs:
     targets: *test_targets
 
   # Build releases in COPR: https://packit.dev/docs/configuration/#copr_build
-  #- job: copr_build
-  #  trigger: release
-  #  owner: your_copr_login
-  #  project: your_copr_project
-  #  preserve_project: True
-  #  targets:
-  #    - fedora-all
-  #    - centos-stream-9-x86_64
+  # The COPR project must list github.com/soltik-dev/cockpit-nginx-manager in
+  # Settings → Integrations → "Packit allowed forge projects".
+  - job: copr_build
+    trigger: release
+    owner: dukerth
+    project: cockpit-nginx-manager
+    preserve_project: True
+    targets:
+      - fedora-all
+      - epel-9
+      - epel-10
 
   # Build releases in Fedora: https://packit.dev/docs/configuration/#propose_downstream
   #- job: propose_downstream

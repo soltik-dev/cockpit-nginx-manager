@@ -1,6 +1,5 @@
-# Create a GitHub upstream release. Replace "TARNAME" with your project tarball
-# name and enable this by dropping the ".disabled" suffix from the file name.
-# See README.md.
+# Create a GitHub upstream release when a version tag (e.g. 0.1.0) is pushed.
+# Publishing the release triggers the Packit COPR build (see packit.yaml).
 name: release
 on:
   push:
@@ -37,7 +36,7 @@ jobs:
           git fetch --force origin ${TAG_VERSION}:refs/tags/${TAG_VERSION}
 
       - name: Build release
-        run: make dist
+        run: make dist node-cache
 
       - name: Create a release
         run: |
@@ -49,4 +48,5 @@ jobs:
           REPO_NAME="${GITHUB_REPOSITORY#*/}"
           gh release create --title ${TAG_VERSION} --notes-file release-note.txt  \
             ${TAG_VERSION} \
-            ${REPO_NAME}-${TAG_VERSION}.tar.xz
+            ${REPO_NAME}-${TAG_VERSION}.tar.xz \
+            ${REPO_NAME}-node-${TAG_VERSION}.tar.xz

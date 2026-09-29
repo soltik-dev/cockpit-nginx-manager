@@ -95,6 +95,13 @@ Checks:
 
 ## Installing system-wide
 
+Packages for Fedora and EPEL 9/10 are built in COPR from every GitHub release:
+
+    sudo dnf copr enable dukerth/cockpit-nginx-manager
+    sudo dnf install cockpit-nginx-manager
+
+From source:
+
     sudo make install
 
 or build an RPM:
