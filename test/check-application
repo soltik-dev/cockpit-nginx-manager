@@ -45,14 +45,17 @@ class TestApplication(testlib.MachineCase):
         conf = "/etc/nginx/conf.d/test.example.com.conf"
 
         self.login_and_go("/nginx-manager")
-        b.wait_in_text("#nginx-sites", "No sites configured")
+        # conf.d is not empty on a stock system (php-fpm ships conf.d/php-fpm.conf)
+        b.wait_visible("#nginx-sites")
+        b.wait_not_in_text("#nginx-sites", "Loading sites")
+        b.wait_not_present("tr[data-site='test.example.com']")
 
         # add a static site
         b.click("#add-site")
         b.set_input_text("#site-domains", "test.example.com www.test.example.com")
         b.wait_val("#site-name", "test.example.com")
         b.set_input_text("#site-root", "/var/www/nginx-manager-test")
-        b.click(".pf-v6-c-modal-box button:contains('Add')")
+        b.click(".pf-v6-c-modal-box__footer button:contains('Add')")
         b.wait_not_present(".pf-v6-c-modal-box")
         b.wait_in_text("tr[data-site='test.example.com']", "Static website")
         b.wait_in_text("tr[data-site='test.example.com']", "Enabled")
@@ -147,7 +150,7 @@ class TestApplication(testlib.MachineCase):
         b.set_input_text("#site-auth-password", "s3cret")
         b.click("#site-auth-add")
         b.wait_in_text(".pf-v6-c-modal-box .pf-v6-c-label", "alice")
-        b.click(".pf-v6-c-modal-box button:contains('Add')")
+        b.click(".pf-v6-c-modal-box__footer button:contains('Add')")
         b.wait_not_present(".pf-v6-c-modal-box")
         b.wait_in_text("tr[data-site='intranet']", "Enabled")
 
@@ -201,7 +204,7 @@ class TestApplication(testlib.MachineCase):
         b.set_input_text("#pool-max-children", "3")
         b.set_input_text("#pool-memory", "128M")
         b.set_input_text("#pool-slowlog", "4")
-        b.click(".pf-v6-c-modal-box button:contains('Add')")
+        b.click(".pf-v6-c-modal-box__footer button:contains('Add')")
         b.wait_not_present(".pf-v6-c-modal-box")
         b.wait_in_text("tr[data-pool='intranet']", "php-intranet")
         b.wait_in_text("tr[data-pool='intranet']", "Enabled")
@@ -220,12 +223,16 @@ class TestApplication(testlib.MachineCase):
         b.select_from_dropdown("#site-type", "php")
         b.set_input_text("#site-root", "/var/www/nginx-manager-test")
         b.select_from_dropdown("#site-pool", "unix:/run/php-fpm/intranet.sock")
-        b.click(".pf-v6-c-modal-box button:contains('Add')")
+        b.click(".pf-v6-c-modal-box__footer button:contains('Add')")
         b.wait_not_present(".pf-v6-c-modal-box")
         b.wait_in_text("tr[data-pool='intranet']", "phpintra.lan")
-        m.execute("echo '<?php echo \"pool ok \" . get_current_user();' > /var/www/nginx-manager-test/index.php")
+        # get_current_user() reports the script owner, so check the worker process instead
+        m.execute("echo '<?php echo \"pool ok \" . getmypid();' > /var/www/nginx-manager-test/index.php")
         m.execute("chmod -R a+rX /var/www/nginx-manager-test")
-        self.assertIn("pool ok php-intranet", m.execute("curl -s -H 'Host: phpintra.lan' http://localhost/"))
+        out = m.execute("curl -s -H 'Host: phpintra.lan' http://localhost/")
+        self.assertIn("pool ok ", out)
+        pid = out.split("pool ok ")[1].strip()
+        self.assertEqual(m.execute(f"stat -c %U /proc/{pid}").strip(), "php-intranet")
 
         # invalid dynamic limits are rejected before touching the file
         b.click("[id='pool-intranet-menu']")
