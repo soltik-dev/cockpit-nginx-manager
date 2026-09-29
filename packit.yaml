@@ -37,7 +37,7 @@ jobs:
 
   # Build releases in COPR: https://packit.dev/docs/configuration/#copr_build
   # The COPR project must list github.com/soltik-dev/cockpit-nginx-manager in
-  # Settings → Integrations → "Packit allowed forge projects".
+  # Settings → Project Details → "Packit allowed forge projects".
   - job: copr_build
     trigger: release
     owner: dukerth

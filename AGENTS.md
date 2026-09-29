@@ -132,7 +132,7 @@ triggers the Packit `copr_build` job (`packit.yaml`) into COPR
 rebuilds the SRPM itself from the tag (its `actions`), it does not download the
 release assets. One-time setup: Packit GitHub App installed on `soltik-dev`, and the
 COPR project listing `github.com/soltik-dev/cockpit-nginx-manager` under
-Settings → Integrations → "Packit allowed forge projects".
+Settings → Project Details → "Packit allowed forge projects".
 
 ## Testing without the VM infrastructure
 
