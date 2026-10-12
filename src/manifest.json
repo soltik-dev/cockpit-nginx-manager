@@ -9,7 +9,7 @@
 
     "tools": {
         "index": {
-            "label": "Nginx",
+            "label": "Nginx manager",
             "keywords": [
                 {
                     "matches": ["nginx", "web", "site", "vhost", "certificate", "tls", "ssl", "letsencrypt", "certbot"]

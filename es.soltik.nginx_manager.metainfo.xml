@@ -2,7 +2,7 @@
 <component type="addon">
   <id>es.soltik.nginx_manager</id>
   <metadata_license>CC0-1.0</metadata_license>
-  <name>Nginx</name>
+  <name>Nginx manager</name>
   <summary>Manage nginx sites and TLS certificates</summary>
   <description>
     <p>
