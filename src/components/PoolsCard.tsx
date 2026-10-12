@@ -116,7 +116,7 @@ title={_("PHP-FPM is not installed")}
         if (entry.meta)
             items.push(
                 <DropdownItem
-key="edit" onClick={() => Dialogs.show(
+key="edit" id={`pool-${entry.name}-edit`} onClick={() => Dialogs.show(
     <PoolDialog entry={entry} pools={pools || []} info={info} onDone={refresh} />)}
                 >
                     {_("Edit")}

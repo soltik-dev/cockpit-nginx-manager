@@ -68,7 +68,7 @@ export const SitesCard = ({ sites, certs, info, php, pools, features, allowed, r
         if (entry.meta)
             items.push(
                 <DropdownItem
-key="edit" onClick={() => Dialogs.show(
+key="edit" id={`site-${entry.name}-edit`} onClick={() => Dialogs.show(
     <SiteDialog
 entry={entry} sites={sites || []} certs={certList} info={info} php={php} pools={pools || []}
                                 features={features} onDone={refresh}

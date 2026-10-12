@@ -68,7 +68,7 @@ class TestApplication(testlib.MachineCase):
 
         # edit: switch to a single-page app
         b.click("[id='site-test.example.com-menu']")
-        b.click(".pf-v6-c-menu__item:contains('Edit'):not(:contains('file'))")
+        b.click("[id='site-test.example.com-edit']")
         b.wait_visible("#site-spa")
         b.set_checked("#site-spa", True)
         b.click(".pf-v6-c-modal-box button:contains('Save')")
@@ -78,7 +78,7 @@ class TestApplication(testlib.MachineCase):
         # an invalid extra directive is rejected and the previous file restored
         before = m.execute(f"cat {conf}")
         b.click("[id='site-test.example.com-menu']")
-        b.click(".pf-v6-c-menu__item:contains('Edit'):not(:contains('file'))")
+        b.click("[id='site-test.example.com-edit']")
         b.click("button:contains('Advanced')")
         b.set_input_text("#site-extra", "this_is_not_a_directive;")
         b.click(".pf-v6-c-modal-box button:contains('Save')")
@@ -140,6 +140,9 @@ class TestApplication(testlib.MachineCase):
         self.login_and_go("/nginx-manager")
         b.click("#add-site")
         b.set_input_text("#site-domains", "intranet.lan")
+        # the name defaults to the first domain
+        b.wait_val("#site-name", "intranet.lan")
+        b.set_input_text("#site-name", "intranet")
         b.set_input_text("#site-root", "/var/www/nginx-manager-test")
         b.set_input_text("#site-httpPort", "8090")
         b.set_input_text("#site-allowFrom", "127.0.0.0/8 ::1")
@@ -175,7 +178,7 @@ class TestApplication(testlib.MachineCase):
 
         # removing the user and disabling auth opens the site again
         b.click("[id='site-intranet-menu']")
-        b.click(".pf-v6-c-menu__item:contains('Edit'):not(:contains('file'))")
+        b.click("[id='site-intranet-edit']")
         b.set_checked("#site-auth", False)
         b.click(".pf-v6-c-modal-box button:contains('Save')")
         b.wait_not_present(".pf-v6-c-modal-box")
@@ -236,7 +239,7 @@ class TestApplication(testlib.MachineCase):
 
         # invalid dynamic limits are rejected before touching the file
         b.click("[id='pool-intranet-menu']")
-        b.click(".pf-v6-c-menu__item:contains('Edit'):not(:contains('file'))")
+        b.click("[id='pool-intranet-edit']")
         b.select_from_dropdown("#pool-pm", "dynamic")
         b.set_input_text("#pool-max-spare", "99")
         b.click(".pf-v6-c-modal-box button:contains('Save')")

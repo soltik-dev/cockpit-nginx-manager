@@ -96,8 +96,8 @@ Shared Cockpit code lives in `pkg/lib/` (not committed; `make` fetches it at
 - Element ids used by tests: `#add-site`, `#site-*` form fields, `[id='site-<name>-menu']`,
   `[id='cert-<id>-menu']`, `tr[data-site=...]`, `tr[data-cert=...]`, `#nginx-service`,
   `#nginx-sites`, `#nginx-certificates`, `#add-pool`, `#pool-*` form fields,
-  `[id='pool-<name>-menu']`, `tr[data-pool=...]`, `#php-pools`. Keep them stable or update
-  `test/check-application`.
+  `[id='pool-<name>-menu']`, `[id='site-<name>-edit']`, `[id='pool-<name>-edit']`,
+  `tr[data-pool=...]`, `#php-pools`. Keep them stable or update `test/check-application`.
 
 ## Build, run, check
 
