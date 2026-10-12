@@ -17,7 +17,6 @@ import { Flex } from "@patternfly/react-core/dist/esm/layouts/Flex/index.js";
 import { Stack } from "@patternfly/react-core/dist/esm/layouts/Stack/index.js";
 
 import cockpit from 'cockpit';
-import * as timeformat from 'timeformat';
 import { useDialogs } from "dialogs.jsx";
 import { KebabDropdown } from "cockpit-components-dropdown.jsx";
 import { ListingTable } from "cockpit-components-table.jsx";
@@ -27,7 +26,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { LetsEncryptDialog } from "./LetsEncryptDialog";
 import { CommandDialog } from "./OutputDialog";
 import { SelfSignedDialog } from "./SelfSignedDialog";
-import { sourceLabel } from "./certs";
+import { sourceLabel, isoDate, isoDateTime } from "./certs";
 
 const _ = cockpit.gettext;
 
@@ -36,7 +35,7 @@ const ExpiryLabel = ({ cert }: { cert: CertInfo }) => {
         return <Label color="red">{_("Unreadable")}</Label>;
     if (!cert.notAfter || cert.daysLeft === null)
         return <Label color="grey">{_("Unknown")}</Label>;
-    const when = timeformat.dateShort(new Date(cert.notAfter));
+    const when = isoDate(new Date(cert.notAfter));
     if (cert.daysLeft < 0)
         return <Label color="red">{cockpit.format(_("Expired $0"), when)}</Label>;
     if (cert.daysLeft <= 14)
@@ -127,12 +126,12 @@ isInline variant="warning"
             {cert.notBefore &&
                 <DescriptionListGroup>
                     <DescriptionListTerm>{_("Valid from")}</DescriptionListTerm>
-                    <DescriptionListDescription>{timeformat.dateTime(new Date(cert.notBefore))}</DescriptionListDescription>
+                    <DescriptionListDescription>{isoDateTime(new Date(cert.notBefore))}</DescriptionListDescription>
                 </DescriptionListGroup>}
             {cert.notAfter &&
                 <DescriptionListGroup>
                     <DescriptionListTerm>{_("Valid until")}</DescriptionListTerm>
-                    <DescriptionListDescription>{timeformat.dateTime(new Date(cert.notAfter))}</DescriptionListDescription>
+                    <DescriptionListDescription>{isoDateTime(new Date(cert.notAfter))}</DescriptionListDescription>
                 </DescriptionListGroup>}
             {cert.error &&
                 <DescriptionListGroup>
