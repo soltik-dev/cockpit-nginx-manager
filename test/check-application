@@ -136,6 +136,9 @@ class TestApplication(testlib.MachineCase):
         m = self.machine
         conf = "/etc/nginx/conf.d/intranet.conf"
         curl = "curl -s -o /dev/null -w '%{http_code}' -H 'Host: intranet.lan' "
+        selinux = m.execute("test -e /sys/fs/selinux/enforce && echo yes || true").strip() == "yes"
+        if selinux:
+            self.addCleanup(m.execute, "semanage port -d -t http_port_t -p tcp 8090 || true")
 
         self.login_and_go("/nginx-manager")
         b.click("#add-site")
@@ -153,8 +156,15 @@ class TestApplication(testlib.MachineCase):
         b.set_input_text("#site-auth-password", "s3cret")
         b.click("#site-auth-add")
         b.wait_in_text(".pf-v6-c-modal-box .pf-v6-c-label", "alice")
+        if selinux:
+            # nginx may not bind 8090 under SELinux until the port is labelled http_port_t
+            b.click(".pf-v6-c-modal-box__footer button:contains('Add')")
+            b.wait_in_text(".pf-v6-c-modal-box", "Allow the port in SELinux")
+            b.set_checked("#site-selinux", True)
         b.click(".pf-v6-c-modal-box__footer button:contains('Add')")
-        b.wait_not_present(".pf-v6-c-modal-box")
+        # semanage rebuilds the policy, which takes a while
+        with b.wait_timeout(60):
+            b.wait_not_present(".pf-v6-c-modal-box")
         b.wait_in_text("tr[data-site='intranet']", "Enabled")
 
         content = m.execute(f"cat {conf}")
@@ -165,6 +175,8 @@ class TestApplication(testlib.MachineCase):
         self.assertIn("X-Frame-Options", content)
         m.execute("grep -q '^alice:' /etc/nginx-manager/htpasswd/intranet")
         m.execute("nginx -t")
+        if selinux:
+            self.assertIn("8090", m.execute("semanage port -l | grep '^http_port_t .*tcp'"))
         self.assertEqual(m.execute(curl + "http://localhost:8090/").strip(), "401")
         self.assertEqual(m.execute(curl + "-u alice:s3cret http://localhost:8090/").strip(), "200")
 

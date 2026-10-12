@@ -20,7 +20,10 @@ import { useDialogs } from "dialogs.jsx";
 import { FormHelper } from "cockpit-components-form-helper.jsx";
 import { ModalError } from "cockpit-components-inline-notification.jsx";
 
-import { CertInfo, NginxInfo, SiteEntry, HtpasswdChanges, saveSite, listHtpasswd, errorMessage } from "../lib/nginx";
+import {
+    CertInfo, NginxInfo, SiteEntry, HtpasswdChanges, SelinuxInfo,
+    saveSite, listHtpasswd, selinuxInfo, selinuxBlockedPorts, errorMessage,
+} from "../lib/nginx";
 import { PhpInfo, PoolEntry, poolFastcgi } from "../lib/php";
 import {
     SiteConfig, SiteType, TlsConfig, RenderFeatures,
@@ -113,6 +116,9 @@ export const SiteDialog = ({ entry, sites, certs, info, php, pools, features, on
     const [listenAddress, setListenAddress] = useState(meta?.listenAddress ?? "");
     const [ipv6, setIpv6] = useState(meta?.ipv6 ?? true);
     const [openFirewall, setOpenFirewall] = useState(false);
+    const [selinuxLoad] = useState(() => selinuxInfo().catch(() => null));
+    const [selinux, setSelinux] = useState<SelinuxInfo | null>(null);
+    const [allowSelinux, setAllowSelinux] = useState(false);
 
     /* access */
     const [allowFromText, setAllowFromText] = useState(meta?.allowFrom?.join(" ") ?? "");
@@ -145,6 +151,10 @@ export const SiteDialog = ({ entry, sites, certs, info, php, pools, features, on
                 .catch(() => { /* keep the names from the header */ });
     }, [entry]);
 
+    useEffect(() => {
+        selinuxLoad.then(setSelinux);
+    }, [selinuxLoad]);
+
     const domains = parseDomains(domainsText);
     const effectiveRoot = root || (name ? `/var/www/${name}` : "");
     const hasRoot = type === "static" || type === "php";
@@ -157,6 +167,7 @@ export const SiteDialog = ({ entry, sites, certs, info, php, pools, features, on
         ...(httpPort.trim() !== "80" ? [parsePort(httpPort)] : []),
         ...(hasTls && httpsPort.trim() !== "443" ? [parsePort(httpsPort)] : []),
     ].filter((p): p is number => p !== null);
+    const blockedPorts = selinuxBlockedPorts(selinux, nonStandardPorts);
 
     const onDomainsChange = (value: string) => {
         setDomainsText(value);
@@ -202,7 +213,7 @@ export const SiteDialog = ({ entry, sites, certs, info, php, pools, features, on
         }
     };
 
-    const validate = (): SiteConfig | null => {
+    const validate = (selinuxNow: SelinuxInfo | null): SiteConfig | null => {
         const errs: Record<string, string> = {};
 
         if (!NAME_RE.test(name))
@@ -249,6 +260,12 @@ export const SiteDialog = ({ entry, sites, certs, info, php, pools, features, on
             errs.httpsPort = _("HTTP and HTTPS must use different ports");
         if (listenAddress.trim() && !isValidAddress(listenAddress.trim()))
             errs.listenAddress = _("Enter an IPv4 or IPv6 address, or leave empty for all");
+        if (selinuxBlockedPorts(selinuxNow, nonStandardPorts).length > 0) {
+            if (!selinuxNow?.semanage)
+                errs.selinux = _("Install policycoreutils-python-utils to allow the port, or use a web port such as 8008 or 8443.");
+            else if (!allowSelinux)
+                errs.selinux = _("Allow the port in SELinux, or use a web port such as 8008 or 8443.");
+        }
 
         const allowFrom = parseList(allowFromText);
         if (allowFrom.some(n => !CIDR_RE.test(n)))
@@ -311,7 +328,9 @@ export const SiteDialog = ({ entry, sites, certs, info, php, pools, features, on
     };
 
     const save = async () => {
-        const site = validate();
+        /* the SELinux check is slow; do not let an early click skip it */
+        const selinuxNow = selinux ?? await selinuxLoad;
+        const site = validate(selinuxNow);
         if (!site)
             return;
         setBusy(true);
@@ -326,6 +345,7 @@ export const SiteDialog = ({ entry, sites, certs, info, php, pools, features, on
                 features,
                 htpasswd,
                 openPorts: openFirewall ? nonStandardPorts : undefined,
+                selinuxPorts: allowSelinux ? selinuxBlockedPorts(selinuxNow, nonStandardPorts) : undefined,
             });
             Dialogs.close();
             onDone();
@@ -528,6 +548,17 @@ id="site-firewall" isChecked={openFirewall} onChange={(_ev, v) => setOpenFirewal
                                               label={cockpit.format(_("Open port(s) $0 in firewalld after saving"), nonStandardPorts.join(", "))}
                                               description={_("Ports 80 and 443 are covered by the http and https firewall services.")}
                                     />
+                                </FormGroup>}
+                            {blockedPorts.length > 0 &&
+                                <FormGroup fieldId="site-selinux">
+                                    {selinux?.semanage &&
+                                        <Checkbox
+id="site-selinux" isChecked={allowSelinux} onChange={(_ev, v) => setAllowSelinux(v)}
+                                                  label={cockpit.format(_("Allow nginx to listen on port(s) $0 in SELinux"), blockedPorts.join(", "))}
+                                                  description={_("Adds the port(s) to the http_port_t type with semanage. SELinux only lets nginx listen on web ports.")}
+                                        />}
+                                    {!selinux?.semanage && cockpit.format(_("SELinux does not let nginx listen on port(s) $0."), blockedPorts.join(", "))}
+                                    <FormHelper fieldId="site-selinux" helperTextInvalid={errors.selinux} />
                                 </FormGroup>}
                         </FormSection>
 

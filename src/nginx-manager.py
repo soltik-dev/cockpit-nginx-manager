@@ -523,6 +523,30 @@ def nginx_info():
     }
 
 
+# http_port_t in the stock Fedora/RHEL policy, used when `semanage port -l` cannot be read
+HTTP_PORTS_DEFAULT = [80, 81, 443, 488, 8008, 8009, 8443, 9000]
+
+
+def selinux_info():
+    """SELinux state and the TCP port ranges nginx (httpd_t) may bind: http_port_t."""
+    if not os.path.exists("/sys/fs/selinux/enforce"):
+        return {"enabled": False, "semanage": False, "httpPorts": []}
+    semanage = shutil.which("semanage")
+    ranges = None
+    if semanage:
+        r = subprocess.run([semanage, "port", "-l"], capture_output=True, text=True)
+        if r.returncode == 0:
+            ranges = []
+            for line in r.stdout.splitlines():
+                parts = line.split(None, 2)
+                if len(parts) == 3 and parts[0] == "http_port_t" and parts[1] == "tcp":
+                    for item in parts[2].split(","):
+                        low, _sep, high = item.strip().partition("-")
+                        ranges.append([int(low), int(high or low)])
+    if ranges is None:
+        ranges = [[p, p] for p in HTTP_PORTS_DEFAULT]
+    return {"enabled": True, "semanage": semanage is not None, "httpPorts": ranges}
+
 def main(argv):
     cmd = argv[0] if argv else ""
     args = argv[1:]
@@ -532,6 +556,8 @@ def main(argv):
         out = list_certs()
     elif cmd == "nginx-info":
         out = nginx_info()
+    elif cmd == "selinux-info":
+        out = selinux_info()
     elif cmd == "selfsigned" and len(args) >= 3:
         out = selfsigned(args[0], int(args[1]), args[2:])
     elif cmd == "delete-selfsigned" and len(args) == 1:

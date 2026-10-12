@@ -60,6 +60,13 @@ export interface NginxInfo {
     acmeWebroot: string;
 }
 
+export interface SelinuxInfo {
+    enabled: boolean;
+    semanage: boolean;
+    /* TCP port ranges labelled http_port_t, the only ones nginx may bind */
+    httpPorts: [number, number][];
+}
+
 export interface RunResult {
     ok: boolean;
     status: number | null;
@@ -117,6 +124,25 @@ export async function helper<T>(args: string[], superuser: cockpit.SuperuserMode
 export const listSites = () => helper<SiteEntry[]>(["list-sites"]);
 export const listCerts = () => helper<CertList>(["list-certs"]);
 export const nginxInfo = () => helper<NginxInfo>(["nginx-info"]);
+export const selinuxInfo = () => helper<SelinuxInfo>(["selinux-info"]);
+
+/* The PORTS nginx cannot bind because SELinux does not label them http_port_t. */
+export function selinuxBlockedPorts(info: SelinuxInfo | null, ports: number[]): number[] {
+    if (!info || !info.enabled)
+        return [];
+    return ports.filter(p => !info.httpPorts.some(([low, high]) => p >= low && p <= high));
+}
+
+async function allowSelinuxPort(port: number): Promise<void> {
+    const semanage = (op: string) => run(["semanage", "port", op, "-t", "http_port_t", "-p", "tcp", String(port)],
+                                         { environ: ["LC_ALL=C"] });
+    let r = await semanage("-a");
+    /* ports owned by another type (e.g. 8080, http_cache_port_t) need a modification instead */
+    if (!r.ok && r.output.includes("already defined"))
+        r = await semanage("-m");
+    if (!r.ok)
+        throw new Error(cockpit.format(_("Allowing port $0 in SELinux failed: $1"), port, r.output.trim() || r.message));
+}
 
 export async function readFile(path: string): Promise<string> {
     const f = cockpit.file(path, { superuser: "try" });
@@ -207,6 +233,8 @@ export interface SaveOptions {
     htpasswd?: HtpasswdChanges | undefined;
     /* TCP ports to open in firewalld after a successful save */
     openPorts?: number[] | undefined;
+    /* TCP ports to label http_port_t before nginx is reloaded */
+    selinuxPorts?: number[] | undefined;
 }
 
 /*
@@ -219,6 +247,9 @@ export async function saveSite(site: SiteConfig, options: SaveOptions): Promise<
         const users = await setHtpasswd(site.name, options.htpasswd);
         site = { ...site, basicAuth: { ...site.basicAuth, users } };
     }
+    /* before the reload: nginx -t passes but the reload silently keeps the old config if the bind is denied */
+    for (const port of options.selinuxPorts || [])
+        await allowSelinuxPort(port);
     const content = renderSite(site, options.features);
     await saveContent(site.name, content, options, site.root);
 

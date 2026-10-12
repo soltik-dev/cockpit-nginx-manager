@@ -33,6 +33,10 @@ BuildRequires: nodejs-esbuild
 %endif
 
 Requires: cockpit-bridge
+%if ! 0%{?suse_version}
+# semanage, to let nginx listen on custom ports under SELinux
+Recommends: policycoreutils-python-utils
+%endif
 
 %{NPM_PROVIDES}
 

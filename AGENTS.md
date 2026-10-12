@@ -64,6 +64,13 @@ Shared Cockpit code lives in `pkg/lib/` (not committed; `make` fetches it at
   Let's Encrypt dialog opened from a site's menu includes all its domains.
 - **Firewall:** `FirewalldRequest` only handles the `http`/`https` services; custom
   ports are opened with `firewall-cmd --add-port` when the user ticks the checkbox.
+- **SELinux:** nginx (`httpd_t`) may only bind ports labelled `http_port_t` (80, 81,
+  443, 488, 8008, 8009, 8443, 9000 by default). `nginx -t` does not notice and
+  `systemctl reload` *succeeds* while nginx keeps the old config, and the next restart
+  fails. So the site dialog checks ports against `selinux-info` (helper) and refuses to
+  save until the user ticks "Allow ... in SELinux", which runs `semanage port -a`
+  (`-m` if the port has another type) *before* the reload. The label is not removed
+  on rollback or delete (harmless).
 - **PHP-FPM pools** mirror sites: one ini file per pool with a `; nginx-manager:`
   header (`POOL_HEADER_PREFIX`), `.conf.disabled` when disabled, `php-fpm -t -y
   <mainConf>` + `systemctl reload` with rollback (`saveContent()` in `src/lib/php.ts`).
